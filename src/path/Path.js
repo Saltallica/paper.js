@@ -1031,7 +1031,10 @@ var Path = PathItem.extend(/** @lends Path# */{
         for (var i = curves.length - 1; i >= 0; i--) {
             var curve = curves[i];
             if (!curve.hasHandles() && (curve.getLength() === 0
-                    || curve.isCollinear(curve.getNext())))
+                    // Pass true for sameDir, as we can only remove straight
+                    // curves if they point in the same direction as the next
+                    // curve, not 180° in the opposite direction.
+                    || curve.isCollinear(curve.getNext(), true)))
                 curve.remove();
         }
         return this;
