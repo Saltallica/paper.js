@@ -581,7 +581,7 @@ PathItem.inject(new function() {
      * contours
      * @param {Function} the operator function that receives as argument the
      * winding number contribution of a curve and returns a boolean value
-     * indicating whether the curve should be  included in the final contour or
+     * indicating whether the curve should be included in the final contour or
      * not
      * @return {Path[]} the contours traced
      */
@@ -819,7 +819,9 @@ PathItem.inject(new function() {
                     // The other segment is part of the boolean result, and we
                     // are at crossing, switch over.
                     drawSegment(seg, other, 'cross', i);
-                    if (operation === 'intersect')
+                    // We need to mark overlap segments as visited when
+                    // processing intersection.
+                    if (inter.isOverlap() && operation === 'intersect')
                         seg._visited = true;
                     seg = other;
                 } else {
@@ -867,9 +869,8 @@ PathItem.inject(new function() {
                 path.add(new Segment(seg._point, handleIn, seg._handleOut));
                 seg._visited = true;
                 seg = seg.getNext();
-                finished = isStart(seg);
-                if (finished) {
-                    seg._visited = true;
+                if (isStart(seg)) {
+                    finished = seg._visited = true;
                     drawSegment(seg, null, 'done', i);
                 }
             }
@@ -1039,7 +1040,9 @@ PathItem.inject(new function() {
                 paths = paths.slice().sort(function (a, b) {
                     return b.getBounds().getArea() - a.getBounds().getArea();
                 });
-                var items = [],
+                var first = paths[0],
+                    clockwise = first.isClockwise(),
+                    items = [first],
                     excluded = {},
                     clockwise = paths[0].isClockwise(),
                     isNonZero = this.getFillRule() === 'nonzero',
@@ -1047,7 +1050,8 @@ PathItem.inject(new function() {
                         this.push(path.isClockwise() ? 1 : -1);
                     }, []);
                 // Walk through paths, from largest to smallest.
-                for (var i = 0; i < length; i++) {
+                // The first, largest child can be skipped.
+                for (var i = 1; i < length; i++) {
                     var path = paths[i],
                         point = path.getInteriorPoint(),
                         isContained = false,
@@ -1147,7 +1151,7 @@ Path.inject(/** @lends Path# */{
             prevCurve = curve;
         }
 
-        // Handle bezier curves. We need to chop them into smaller curves  with
+        // Handle bezier curves. We need to chop them into smaller curves with
         // defined orientation, by solving the derivative curve for y extrema.
         function handleCurve(v) {
             // Filter out curves of zero length.
