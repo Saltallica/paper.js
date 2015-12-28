@@ -819,6 +819,8 @@ PathItem.inject(new function() {
                     // The other segment is part of the boolean result, and we
                     // are at crossing, switch over.
                     drawSegment(seg, other, 'cross', i);
+                    if (operation === 'intersect')
+                        seg._visited = true;
                     seg = other;
                 } else {
                     // Keep on truckin'
@@ -845,7 +847,7 @@ PathItem.inject(new function() {
                     }
                     if (!finished) {
                         // We didn't manage to switch, so stop right here.
-                        console.error('Visited segment encountered, aborting #'
+                        console.info('Visited segment encountered, aborting #'
                                 + pathCount + '.'
                                 + (path ? path._segments.length + 1 : 1)
                                 + ', id: ' + seg._path._id + '.' + seg._index
@@ -867,6 +869,7 @@ PathItem.inject(new function() {
                 seg = seg.getNext();
                 finished = isStart(seg);
                 if (finished) {
+                    seg._visited = true;
                     drawSegment(seg, null, 'done', i);
                 }
             }
@@ -881,20 +884,27 @@ PathItem.inject(new function() {
                             (path ? path._segments.length + 1 : 1));
                 }
             } else if (path) {
-                var colors = ['cyan', 'green', 'orange', 'yellow'];
-                var color = new Color(colors[pathCount % (colors.length - 1)]);
-                console.error('%cBoolean operation results in open path',
-                        'background: ' + color.toCSS() + '; color: #fff;',
-                        'segs =',
-                        path._segments.length, 'length = ', path.getLength(),
-                        '#' + pathCount + '.' +
-                        (path ? path._segments.length + 1 : 1));
-                if (window.reportTraces) {
-                    paper.project.activeLayer.addChild(path);
-                    color.alpha = 0.5;
-                    path.strokeColor = color;
-                    path.strokeWidth = 3;
-                    path.strokeScaling = false;
+                var length = path.getLength();
+                // Only complain about open paths if they are long enough.
+                if (length >= /*#=*/Numerical.GEOMETRIC_EPSILON) {
+                    // This path wasn't finished and is hence invalid.
+                    // Report the error to the console for the time being.
+                    var colors = ['cyan', 'green', 'orange', 'yellow'];
+                    var color = new Color(
+                            colors[pathCount % (colors.length - 1)]);
+                    console.error('%cBoolean operation results in open path',
+                            'background: ' + color.toCSS() + '; color: #fff;',
+                            'segments =', path._segments.length,
+                            'length = ', length,
+                            '#' + pathCount + '.' +
+                                (path ? path._segments.length + 1 : 1));
+                    if (window.reportTraces) {
+                        paper.project.activeLayer.addChild(path);
+                        color.alpha = 0.5;
+                        path.strokeColor = color;
+                        path.strokeWidth = 3;
+                        path.strokeScaling = false;
+                    }
                 }
                 path = null;
             }
