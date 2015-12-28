@@ -814,8 +814,6 @@ PathItem.inject(new function() {
                                 + inter._segment._index);
                 }
 
-            if (false) {
-                // BOOLEAN-FIX:
                 if (!path || !other) {
                     // Just add the first segment and all segments that have no
                     // intersection.
@@ -829,12 +827,7 @@ PathItem.inject(new function() {
                     // Keep on truckin'
                     drawSegment(seg, null, 'stay', i, 'blue');
                 }
-            } else {
-                // If we are at a crossing and the other segment is part of the
-                // boolean result, switch to it.
-                if (path && other && isValid(other))
-                    seg = other;
-            }
+
                 // If the new segment is visited already, check if we're back
                 // at the start.
                 if (seg._visited) {
