@@ -589,22 +589,26 @@ PathItem.inject(new function() {
         pathIndex = 0;
         pathCount = 1;
 
-        function labelSegment(seg, text, color) {
-            var point = seg.point;
-            var key = Math.round(point.x / (10 * scaleFactor))
-                + ',' + Math.round(point.y  / (10 * scaleFactor));
-            var offset = segmentOffset[key] || 0;
-            segmentOffset[key] = offset + 1;
-            var size = fontSize * scaleFactor;
-            var text = new PointText({
-                point: point.add(
-                        new Point(size, size / 2).add(0, offset * size * 1.2)
+        function labelSegment(seg, text) {
+            var path = seg._path,
+                item = path._parent instanceof CompoundPath
+                        ? path._parent : path,
+                color = item.strokeColor || item.fillColor || 'black',
+                point = seg.point,
+                key = Math.round(point.x / (10 * scaleFactor))
+                    + ',' + Math.round(point.y  / (10 * scaleFactor)),
+                offset = segmentOffset[key] || 0,
+                size = fontSize * scaleFactor,
+                text = new PointText({
+                    point: point.add(new Point(size, size / 2)
+                        .add(0, offset * size * 1.2)
                         .rotate(textAngle)),
-                content: text,
-                justification: 'left',
-                fillColor: color,
-                fontSize: fontSize
-            });
+                    content: text,
+                    justification: 'left',
+                    fillColor: color,
+                    fontSize: fontSize
+                });
+            segmentOffset[key] = offset + 1;
             // TODO! PointText should have pivot in #point by default!
             text.pivot = text.globalToLocal(text.point);
             text.scale(scaleFactor);
@@ -618,15 +622,9 @@ PathItem.inject(new function() {
             return text;
         }
 
-        function drawSegment(seg, other, text, index, color) {
+        function drawSegment(seg, other, text, index) {
             if (!window.reportSegments)
                 return;
-            new Path.Circle({
-                center: seg.point,
-                radius: fontSize / 2 * scaleFactor,
-                strokeColor: color,
-                strokeScaling: false
-            });
             labelSegment(seg, '#' + pathCount + '.'
                             + (path ? path._segments.length + 1 : 1)
                             + ' (' + (index + 1) + '): ' + text
@@ -637,8 +635,7 @@ PathItem.inject(new function() {
                     + '   op: ' + isValid(seg)
                     + '   ov: ' + !!(inter && inter.isOverlap())
                     + '   wi: ' + seg._winding
-                    + '   mu: ' + !!(inter && inter._next)
-                    , color);
+                    + '   mu: ' + !!(inter && inter._next));
         }
 
         for (var i = 0, j = 0;
@@ -649,33 +646,33 @@ PathItem.inject(new function() {
                 id = path._id,
                 point = seg.point,
                 inter = seg._intersection,
-                ix = inter,
-                ixs = ix && ix._segment,
-                n1x = inter && inter._next,
-                n1xs = n1x && n1x._segment,
-                n2x = n1x && n1x._next,
-                n2xs = n2x && n2x._segment,
-                n3x = n2x && n2x._next,
-                n3xs = n3x && n3x._segment,
-                item = path._parent instanceof CompoundPath ? path._parent : path;
+                nx1 = inter && inter._next,
+                nx2 = nx1 && nx1._next,
+                nx3 = nx2 && nx2._next,
+                intersections = {
+                    'ix': inter,
+                    'nx¹': nx1,
+                    'nx²': nx2,
+                    'nx³': nx3
+                };
             if (!(id in pathIndices)) {
                 pathIndices[id] = ++pathIndex;
                 j = 0;
             }
-            labelSegment(seg, '#' + pathIndex + '.' + (j + 1)
+            var label = '#' + pathIndex + '.' + (j + 1)
                     + '   id: ' + seg._path._id + '.' + seg._index
-                    + '   ix: ' + (ixs && ixs._path._id + '.' + ixs._index
-                        + '(' + ix._id + ')' || '--')
-                    + '   n1x: ' + (n1xs && n1xs._path._id + '.' + n1xs._index
-                        + '(' + n1x._id + ')' || '--')
-                    + '   n2x: ' + (n2xs && n2xs._path._id + '.' + n2xs._index
-                        + '(' + n2x._id + ')' || '--')
-                    + '   n3x: ' + (n3xs && n3xs._path._id + '.' + n3xs._index
-                        + '(' + n3x._id + ')' || '--')
                     + '   pt: ' + seg._point
                     + '   ov: ' + !!(inter && inter.isOverlap())
-                    + '   wi: ' + seg._winding
-                    , item.strokeColor || item.fillColor || 'black');
+                    + '   wi: ' + seg._winding;
+            for (var key in intersections) {
+                var ix = intersections[key],
+                    s = ix && ix._segment;
+                if (s) {
+                    label += '   ' + key + ': ' + s._path._id + '.' + s._index
+                            + '(' + ix._id + ')';
+                }
+            }
+            labelSegment(seg, label);
         }
 
         var paths = [],
@@ -817,15 +814,15 @@ PathItem.inject(new function() {
                 if (!path || !other) {
                     // Just add the first segment and all segments that have no
                     // intersection.
-                    drawSegment(seg, null, 'add', i, 'black');
+                    drawSegment(seg, null, 'add', i);
                 } else if (isValid(other)) {
                     // The other segment is part of the boolean result, and we
                     // are at crossing, switch over.
-                    drawSegment(seg, other, 'cross', i, 'green');
+                    drawSegment(seg, other, 'cross', i);
                     seg = other;
                 } else {
                     // Keep on truckin'
-                    drawSegment(seg, null, 'stay', i, 'blue');
+                    drawSegment(seg, null, 'stay', i);
                 }
 
                 // If the new segment is visited already, check if we're back
@@ -833,7 +830,7 @@ PathItem.inject(new function() {
                 if (seg._visited) {
                     finished = isStart(seg);
                     if (finished) {
-                        drawSegment(seg, null, 'done', i, 'red');
+                        drawSegment(seg, null, 'done', i);
                     }
                     if (!finished && inter) {
                         // See if any of the intersections is the start segment,
@@ -843,7 +840,7 @@ PathItem.inject(new function() {
                         if (found) {
                             seg = found;
                             finished = true;
-                            drawSegment(seg, null, 'done multiple', i, 'red');
+                            drawSegment(seg, null, 'done multiple', i);
                         }
                     }
                     if (!finished) {
@@ -870,7 +867,7 @@ PathItem.inject(new function() {
                 seg = seg.getNext();
                 finished = isStart(seg);
                 if (finished) {
-                    drawSegment(seg, null, 'done', i, 'red');
+                    drawSegment(seg, null, 'done', i);
                 }
             }
             // Finish with closing the paths if necessary, correctly linking up
