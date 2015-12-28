@@ -1031,6 +1031,7 @@ PathItem.inject(new function() {
                 });
                 var items = [],
                     excluded = {},
+                    clockwise = paths[0].isClockwise(),
                     isNonZero = this.getFillRule() === 'nonzero',
                     windings = isNonZero && Base.each(paths, function(path) {
                         this.push(path.isClockwise() ? 1 : -1);
@@ -1063,12 +1064,13 @@ PathItem.inject(new function() {
                             isContained = true;
                             if (!excluded[j]) {
                                 // Set opposite orientation of containing path.
-                                path.setClockwise(!paths[j].isClockwise());
+                                clockwise = !paths[j].isClockwise();
                                 break;
                             }
                         }
                     }
                     if (!exclude) {
+                        path.setClockwise(clockwise);
                         items.push(path);
                     }
                 }
