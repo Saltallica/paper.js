@@ -160,8 +160,8 @@ var Shape = Item.extend(/** @lends Shape# */{
      * inherits all settings from it, similar to {@link Item#clone()}.
      *
      * @param {Boolean} [insert=true] specifies whether the new path should be
-     *     inserted into the DOM. When set to `true`, it is inserted above the
-     *     shape item
+     *     inserted into the scene graph. When set to `true`, it is inserted
+     *     above the shape item
      * @return {Shape} the newly created path item with the same geometry as
      *     this shape item
      * @see Path#toShape(insert)
@@ -180,7 +180,8 @@ var Shape = Item.extend(/** @lends Shape# */{
         // Respect the setting of paper.settings.applyMatrix for new paths:
         if (paper.settings.applyMatrix)
             path.setApplyMatrix(true);
-        path.insertAbove(this);
+        if (insert != false) // No double-equal!
+            path.insertAbove(this);
         return path;
     },
 

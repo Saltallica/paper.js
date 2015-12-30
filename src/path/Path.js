@@ -1398,8 +1398,8 @@ var Path = PathItem.extend(/** @lends Path# */{
      * and inherits all settings from it, similar to {@link Item#clone()}.
      *
      * @param {Boolean} [insert=true] specifies whether the new shape should be
-     * inserted into the DOM. When set to `true`, it is inserted above the
-     * path item
+     * inserted into the scene graph. When set to `true`, it is inserted above
+     * the path item
      * @return {Shape} the newly created shape item with the same geometry as
      * this path item if it can be matched, `null` otherwise
      * @see Shape#toPath(insert)
@@ -1507,7 +1507,8 @@ var Path = PathItem.extend(/** @lends Path# */{
             shape._matrix.preConcatenate(this._matrix);
             // Determine and apply the shape's angle of rotation.
             shape.rotate(topCenter.subtract(center).getAngle() + 90);
-            shape.insertAbove(this);
+            if (insert != false) // No double-equal!
+                shape.insertAbove(this);
             return shape;
         }
         return null;
@@ -1588,8 +1589,8 @@ var Path = PathItem.extend(/** @lends Path# */{
             // Handle joins / caps that are not round specificelly, by
             // hit-testing their polygon areas.
             if (join !== 'round' || cap !== 'round') {
-                // Create an 'internal' path without id and outside the DOM
-                // to run the hit-test on it.
+                // Create an 'internal' path without id and outside the scene
+                // graph to run the hit-test on it.
                 area = new Path({ internal: true, closed: true });
                 if (closed || segment._index > 0
                         && segment._index < numSegments - 1) {

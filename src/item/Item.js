@@ -37,7 +37,7 @@ var Item = Base.extend(Emitter, /** @lends Item# */{
 
         /**
          * An object constant that can be passed to Item#initialize() to avoid
-         * insertion into the DOM.
+         * insertion into the scene graph.
          *
          * @private
          */
@@ -100,8 +100,8 @@ var Item = Base.extend(Emitter, /** @lends Item# */{
             matrix.translate(point);
         matrix._owner = this;
         this._style = new Style(project._currentStyle, this, project);
-        // If _project is already set, the item was already moved into the DOM
-        // hierarchy. Used by Layer, where it's added to project.layers instead
+        // If _project is already set, the item was already moved into the scene
+        // graph. Used by Layer, where it's added to project.layers instead
         if (!this._project) {
             // Do not insert into DOM if it's an internal path, if props.insert
             // is false, or if the props are setting a different parent anyway.
@@ -968,7 +968,7 @@ var Item = Base.extend(Emitter, /** @lends Item# */{
                         other._bounds = other._position = undefined;
                         // We need to recursively call _clearBoundsCache, as
                         // when the cache for the other item's children is not
-                        // valid anymore, that propagates up the DOM tree.
+                        // valid anymore, that propagates up the scene graph.
                         if (other._boundsCache)
                             Item._clearBoundsCache(other);
                     }
@@ -1411,8 +1411,8 @@ var Item = Base.extend(Emitter, /** @lends Item# */{
      * item.
      *
      * @param {Boolean} [insert=true] specifies whether the copy should be
-     *     inserted into the DOM. When set to `true`, it is inserted above the
-     *     original
+     *     inserted into the scene graph. When set to `true`, it is inserted
+     *     above the original
      * @return {Item} the newly cloned item
      *
      * @example {@paperscript}
@@ -1445,7 +1445,7 @@ var Item = Base.extend(Emitter, /** @lends Item# */{
         if (!children)
             copy.copyAttributes(this);
         // Insert is true by default.
-        if (insert || insert === undefined)
+        if (insert != false) // No double-equal!
             copy.insertAbove(this);
         // Make sure we're not overriding the original name in the same parent
         var name = this._name,
@@ -1540,6 +1540,9 @@ var Item = Base.extend(Emitter, /** @lends Item# */{
      * @param {Number} [resolution=view.resolution] the resolution of the raster
      *     in pixels per inch (DPI). If not specified, the value of
      *     `view.resolution` is used.
+     * @param {Boolean} [insert=true] specifies whether the raster should be
+     *     inserted into the scene graph. When set to `true`, it is inserted
+     *     above the original
      * @return {Raster} the newly created raster item
      *
      * @example {@paperscript}
@@ -1560,7 +1563,8 @@ var Item = Base.extend(Emitter, /** @lends Item# */{
      * circle.scale(5);
      * raster.scale(5);
      */
-    rasterize: function(resolution) {
+    rasterize: function(resolution, insert) {
+        // TODO: Switch to options object for more descriptive call signature.
         var bounds = this.getStrokeBounds(),
             scale = (resolution || this.getView().getResolution()) / 72,
             // Floor top-left corner and ceil bottom-right corner, to never
@@ -1585,7 +1589,8 @@ var Item = Base.extend(Emitter, /** @lends Item# */{
         raster.transform(new Matrix().translate(topLeft.add(size.divide(2)))
                 // Take resolution into account and scale back to original size.
                 .scale(1 / scale));
-        raster.insertAbove(this);
+        if (insert != false) // No double-equal!
+            raster.insertAbove(this);
         return raster;
     },
 
@@ -2586,10 +2591,10 @@ var Item = Base.extend(Emitter, /** @lends Item# */{
     },
 
     /**
-     * Checks whether the item and all its parents are inserted into the DOM or
-     * not.
+     * Checks whether the item and all its parents are inserted into scene graph
+     * or not.
      *
-     * @return {Boolean} {@true if the item is inserted into the DOM}
+     * @return {Boolean} {@true if the item is inserted into the scene graph}
      */
     isInserted: function() {
         return this._parent ? this._parent.isInserted() : false;
@@ -3998,8 +4003,8 @@ var Item = Base.extend(Emitter, /** @lends Item# */{
 
     /**
      * Checks the _updateVersion of the item to see if it got drawn in the draw
-     * loop. If the version is out of sync, the item is either not in the DOM
-     * anymore or is invisible.
+     * loop. If the version is out of sync, the item is either not in the scene
+     * graph anymore or is invisible.
      */
     _isUpdated: function(updateVersion) {
         var parent = this._parent;

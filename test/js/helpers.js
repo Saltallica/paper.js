@@ -10,6 +10,27 @@
  * All rights reserved.
  */
 
+// Until window.history.pushState() works when running locally, we need to trick
+// qunit into thinking that the feature is not present. This appears to work...
+// TODO: Ideally we should fix this in QUnit instead.
+delete window.history;
+window.history = {};
+
+QUnit.begin(function() {
+    if (QUnit.urlParams.hidepassed) {
+        document.getElementById('qunit-tests').className += ' hidepass';
+    }
+    resemble.outputSettings({
+        errorColor: {
+            red: 255,
+            green: 51,
+            blue: 0
+        },
+        errorType: 'flat',
+        transparency: 1
+    });
+});
+
 // Register a jsDump parser for Base.
 QUnit.jsDump.setParser('Base', function (obj, stack) {
     // Just compare the string representation of classes inheriting from Base,
@@ -35,26 +56,93 @@ function compareProperties(actual, expected, properties, message, options) {
 }
 
 function compareItem(actual, expected, message, options, properties) {
-    if (options && options.cloned)
-        QUnit.notStrictEqual(actual.id, 'not ' + expected.id, message + '.id');
-    QUnit.strictEqual(actual.constructor, expected.constructor,
-            message + '.constructor');
-    equals(actual.name,
-            // When item was cloned and had a name, the name will be versioned
-            options && options.cloned && expected.name
-                ? expected.name + ' 1' : expected.name,
-            message + '.name');
-    compareProperties(actual, expected, ['children', 'bounds', 'position',
-            'matrix', 'data', 'opacity', 'locked', 'visible', 'blendMode',
-            'selected', 'fullySelected', 'clipMask', 'guide'],
-            message, options);
-    if (properties)
-        compareProperties(actual, expected, properties, message, options);
-    // Style
-    compareProperties(actual.style, expected.style, ['fillColor', 'strokeColor',
-            'strokeCap', 'strokeJoin', 'dashArray', 'dashOffset', 'miterLimit',
-            'fontSize', 'font', 'leading', 'justification'],
-            message + '.style', options);
+
+    function getImageTag(raster) {
+        return '<img width="' + raster.with + '" height="' + raster.height
+                + '" src="'+ raster.source + '">'
+    }
+
+    function rasterize(item, group, resolution) {
+        var raster = null;
+        if (group) {
+            group.addChild(item);
+            raster = group.rasterize(resolution, false);
+            item.remove();
+        }
+        return raster;
+    }
+
+    if (options && options.rasterize) {
+        // In order to properly compare pixel by pixel, we need to put each item
+        // into a group with a white background of the united dimensions of the
+        // bounds of both items before rasterizing.
+        var resolution = options.rasterize == true ? 72 : options.rasterize,
+            group = actual && expected && new Group({
+                insert: false,
+                children: [
+                    new Shape.Rectangle({
+                        rectangle: actual.bounds.unite(expected.bounds),
+                        fillColor: 'white'
+                    })
+                ]
+            }),
+            actual = rasterize(actual, group, resolution),
+            expected = rasterize(expected, group, resolution);
+        if (!actual || !expected) {
+            QUnit.pushFailure('Unable to compare rasterized items: ' +
+                    (!actual ? 'actual' : 'expected') + ' item is null',
+                    QUnit.stack(2));
+        } else {
+            // Use resemble.js to compare the two rasterized items.
+            var id = QUnit.config.current.testId,
+                result;
+            resemble(actual.getImageData())
+                .compareTo(expected.getImageData())
+                // When working with imageData, this call is synchronous:
+                .onComplete(function(data) { result = data; });
+            var identical = result ? 100 - result.misMatchPercentage : 0,
+                ok = identical == 100;
+            QUnit.push(ok, identical.toFixed(2) + '% identical',
+                    '100.00% identical', message);
+            if (!ok && result) {
+                var output = document.getElementById('qunit-test-output-' + id),
+                    bounds = result.diffBounds;
+                output.querySelector('.test-expected td').innerHTML =
+                        getImageTag(expected);
+                var el = output.querySelector('.test-actual td');
+                el.innerHTML = getImageTag(actual) + '<br>' +
+                        el.innerHTML.replace(/<\/?pre>|"/g, '');
+                output.querySelector('.test-diff td').innerHTML =
+                        getImageTag({
+                            source: result.getImageDataUrl(),
+                            width: bounds.right - bounds.left,
+                            height: bounds.bottom - bounds.top
+                        });
+            }
+        }
+    } else {
+        if (options && options.cloned)
+            QUnit.notStrictEqual(actual.id, expected.id,
+                    'not ' + message + '.id');
+        QUnit.strictEqual(actual.constructor, expected.constructor,
+                message + '.constructor');
+        // When item is cloned and has a name, the name will be versioned:
+        equals(actual.name,
+                options && options.cloned && expected.name
+                    ? expected.name + ' 1' : expected.name,
+                message + '.name');
+        compareProperties(actual, expected, ['children', 'bounds', 'position',
+                'matrix', 'data', 'opacity', 'locked', 'visible', 'blendMode',
+                'selected', 'fullySelected', 'clipMask', 'guide'],
+                message, options);
+        if (properties)
+            compareProperties(actual, expected, properties, message, options);
+        // Style
+        compareProperties(actual.style, expected.style, ['fillColor',
+                'strokeColor', 'strokeCap', 'strokeJoin', 'dashArray',
+                'dashOffset', 'miterLimit', 'fontSize', 'font', 'leading',
+                'justification'], message + '.style', options);
+    }
 }
 
 // A list of comparator functions, based on `expected` type. See equals() for
