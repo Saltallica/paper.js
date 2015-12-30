@@ -1039,7 +1039,6 @@ PathItem.inject(new function() {
                 var first = paths[0],
                     items = [first],
                     excluded = {},
-                    clockwise = paths[0].isClockwise(),
                     isNonZero = this.getFillRule() === 'nonzero',
                     windings = isNonZero && Base.each(paths, function(path) {
                         this.push(path.isClockwise() ? 1 : -1);
