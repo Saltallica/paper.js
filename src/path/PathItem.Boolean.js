@@ -80,17 +80,19 @@ PathItem.inject(new function() {
     var pathIndex;
     var pathCount;
 
+    function initializeReporting() {
+        scaleFactor = Base.pick(window.scaleFactor, scaleFactor);
+        textAngle = Base.pick(window.textAngle, 0);
+        segmentOffset = {};
+        pathIndices = {};
+    }
+
     // Boolean operators return true if a curve with the given winding
     // contribution contributes to the final result or not. They are called
     // for each curve in the graph after curves in the operands are
     // split at crossings.
     function computeBoolean(path1, path2, operation) {
-        scaleFactor = Base.pick(window.scaleFactor, scaleFactor);
-        textAngle = Base.pick(window.textAngle, 0);
-
-        segmentOffset = {};
-        pathIndices = {};
-
+        initializeReporting();
         var reportSegments = window.reportSegments;
         var reportWindings = window.reportWindings;
         var reportIntersections = window.reportIntersections;
@@ -623,7 +625,8 @@ PathItem.inject(new function() {
         }
 
         function drawSegment(seg, other, text, index) {
-            if (!window.reportSegments)
+            if (!window.reportSegments || window.reportFilter != null
+                    && pathCount != window.reportFilter)
                 return;
             labelSegment(seg, '#' + pathCount + '.'
                             + (path ? path._segments.length + 1 : 1)
@@ -1013,6 +1016,7 @@ PathItem.inject(new function() {
          * compound-path is created, replacing the current one.
          */
         resolveCrossings: function() {
+            initializeReporting();
             var children = this._children,
                 // Support both path and compound-path items
                 paths = children || [this],
