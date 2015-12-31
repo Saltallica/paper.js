@@ -1687,7 +1687,8 @@ new function() { // Scope for intersection using bezier fat-line clipping
             // a little optimization, we can scale the handles with 0.75
             // before calculating the control bounds and still be sure that
             // the curve is fully contained.
-            var c1p1x = v1[0], c1p1y = v1[1],
+            var epsilon = /*#=*/Numerical.GEOMETRIC_EPSILON,
+                c1p1x = v1[0], c1p1y = v1[1],
                 c1p2x = v1[6], c1p2y = v1[7],
                 c2p1x = v2[0], c2p1y = v2[1],
                 c2p2x = v2[6], c2p2y = v2[7],
@@ -1702,13 +1703,13 @@ new function() { // Scope for intersection using bezier fat-line clipping
                 c2s2y = (3 * v2[5] + c2p2y) / 4,
                 min = Math.min,
                 max = Math.max;
-            if (!(  max(c1p1x, c1s1x, c1s2x, c1p2x) >=
+            if (!(  max(c1p1x, c1s1x, c1s2x, c1p2x) + epsilon >=
                     min(c2p1x, c2s1x, c2s2x, c2p2x) &&
-                    min(c1p1x, c1s1x, c1s2x, c1p2x) <=
+                    min(c1p1x, c1s1x, c1s2x, c1p2x) - epsilon <=
                     max(c2p1x, c2s1x, c2s2x, c2p2x) &&
-                    max(c1p1y, c1s1y, c1s2y, c1p2y) >=
+                    max(c1p1y, c1s1y, c1s2y, c1p2y) + epsilon >=
                     min(c2p1y, c2s1y, c2s2y, c2p2y) &&
-                    min(c1p1y, c1s1y, c1s2y, c1p2y) <=
+                    min(c1p1y, c1s1y, c1s2y, c1p2y) - epsilon <=
                     max(c2p1y, c2s1y, c2s2y, c2p2y)))
                 return locations;
             // Now detect and handle overlaps:
@@ -1728,10 +1729,6 @@ new function() { // Scope for intersection using bezier fat-line clipping
             var straight1 = Curve.isStraight(v1),
                 straight2 = Curve.isStraight(v2),
                 straight = straight1 && straight2,
-                // NOTE: Use smaller Numerical.EPSILON to compare beginnings and
-                // end points to avoid matching them on almost collinear lines,
-                // see: https://github.com/paperjs/paper.js/issues/777
-                epsilon = /*#=*/Numerical.EPSILON,
                 before = locations.length;
             // Determine the correct intersection method based on whether one or
             // curves are straight lines:
