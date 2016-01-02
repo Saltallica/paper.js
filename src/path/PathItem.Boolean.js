@@ -662,8 +662,7 @@ PathItem.inject(new function() {
                 pathIndices[id] = ++pathIndex;
                 j = 0;
             }
-            var label = '#' + pathIndex + '.' + (j + 1)
-                    + '   id: ' + seg._path._id + '.' + seg._index
+            var label = ' id: ' + seg._path._id + '.' + seg._index
                     + '   pt: ' + seg._point
                     + '   ov: ' + !!(inter && inter.isOverlap())
                     + '   wi: ' + seg._winding;
@@ -698,7 +697,7 @@ PathItem.inject(new function() {
         }
 
         function isStart(seg) {
-            return seg === start || seg === otherStart;
+            return seg && (seg === start || seg === otherStart);
         }
 
         // If there are multiple possible intersections, find the one that's
@@ -745,7 +744,7 @@ PathItem.inject(new function() {
                 // used, in which invalid current segments are tolerated, and
                 // overlaps for the next segment are allowed as long as they are
                 // valid when not adjusted.
-                if (isStart(nextSeg)
+                if (isStart(seg) || isStart(nextSeg)
                     || !seg._visited && !nextSeg._visited
                     // Self-intersections (!operator) don't need isValid() calls
                     && (!operator
@@ -770,27 +769,19 @@ PathItem.inject(new function() {
             return null;
         }
 
-        function findStartSegment(inter, next) {
-            while (inter) {
-                var seg = inter._segment;
-                if (isStart(seg))
-                    return seg;
-                inter = inter[next ? '_next' : '_prev'];
-            }
-        }
-
         for (var i = 0, l = segments.length; i < l; i++) {
             var seg = segments[i],
                 path = null,
-                finished = false;
+                finished = false,
+                handleIn;
             // Do not start a chain with already visited segments, and segments
             // that are not going to be part of the resulting operation.
             if (!isValid(seg, true))
                 continue;
             start = otherStart = null;
             while (!finished) {
-                var inter = seg._intersection,
-                    handleIn = path && seg._handleIn;
+                var inter = seg._intersection;
+                handleIn = path && seg._handleIn;
                 // Once we started a chain, see if there are multiple
                 // intersections, and if so, pick the best one:
                 if (inter && window.reportSegments) {
@@ -813,12 +804,17 @@ PathItem.inject(new function() {
                             + ', other: ' + inter._segment._path._id + '.'
                                 + inter._segment._index);
                 }
-
-                if (!path || !other) {
+                if (!path) {
                     // Just add the first segment and all segments that have no
                     // intersection.
                     drawSegment(seg, null, 'add', i);
-                } else if (isValid(other)) {
+                } else if (isStart(seg)) {
+                    finished = true;
+                } else if (isStart(other)) {
+                    finished = true;
+                    // Switch the segment, but do not update handleIn
+                    seg = other;
+                } else if (other && isValid(other)) {
                     // The other segment is part of the boolean result, and we
                     // are at crossing, switch over.
                     drawSegment(seg, other, 'cross', i);
@@ -831,33 +827,18 @@ PathItem.inject(new function() {
                     // Keep on truckin'
                     drawSegment(seg, null, 'stay', i);
                 }
-
-                // If the new segment is visited already, check if we're back
-                // at the start.
+                if (finished) {
+                    drawSegment(seg, null, 'done', i);
+                    seg._visited = true;
+                    break;
+                }
                 if (seg._visited) {
-                    finished = isStart(seg);
-                    if (finished) {
-                        drawSegment(seg, null, 'done', i);
-                    }
-                    if (!finished && inter) {
-                        // See if any of the intersections is the start segment,
-                        // and if so finish the path.
-                        var found = findStartSegment(inter, true)
-                            || findStartSegment(inter, false);
-                        if (found) {
-                            seg = found;
-                            finished = true;
-                            drawSegment(seg, null, 'done multiple', i);
-                        }
-                    }
-                    if (!finished) {
-                        // We didn't manage to switch, so stop right here.
-                        console.info('Visited segment encountered, aborting #'
-                                + pathCount + '.'
-                                + (path ? path._segments.length + 1 : 1)
-                                + ', id: ' + seg._path._id + '.' + seg._index
-                                + ', multiple: ' + !!(inter && inter._next));
-                    }
+                    // We didn't manage to switch, so stop right here.
+                    console.info('Visited segment encountered, aborting #'
+                            + pathCount + '.'
+                            + (path ? path._segments.length + 1 : 1)
+                            + ', id: ' + seg._path._id + '.' + seg._index
+                            + ', multiple: ' + !!(inter && inter._next));
                     break;
                 }
                 if (!path) {
@@ -865,22 +846,19 @@ PathItem.inject(new function() {
                     start = seg;
                     otherStart = other;
                 }
-                if (window.reportSegments) {
-                    console.log('Adding', seg._path._id + '.' + seg._index);
-                }
                 // Add the segment to the path, and mark it as visited.
                 path.add(new Segment(seg._point, handleIn, seg._handleOut));
+                if (window.reportSegments) {
+                    console.log('Adding', seg._path._id + '.' + seg._index
+                            + ': ' + path.lastSegment);
+                }
                 seg._visited = true;
                 seg = seg.getNext();
-                if (isStart(seg)) {
-                    finished = seg._visited = true;
-                    drawSegment(seg, null, 'done', i);
-                }
             }
             // Finish with closing the paths if necessary, correctly linking up
             // curves etc.
             if (finished) {
-                path.firstSegment.setHandleIn(seg._handleIn);
+                path.firstSegment.setHandleIn(handleIn);
                 path.setClosed(true);
                 if (window.reportSegments) {
                     console.log('Boolean operation completed',
