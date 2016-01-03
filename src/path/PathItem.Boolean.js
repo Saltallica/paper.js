@@ -76,15 +76,12 @@ PathItem.inject(new function() {
     var fontSize = 5;
 
     var segmentOffset;
-    var pathIndices;
-    var pathIndex;
     var pathCount;
 
     function initializeReporting() {
         scaleFactor = Base.pick(window.scaleFactor, scaleFactor);
         textAngle = Base.pick(window.textAngle, 0);
         segmentOffset = {};
-        pathIndices = {};
     }
 
     // Boolean operators return true if a curve with the given winding
@@ -588,28 +585,56 @@ PathItem.inject(new function() {
      * @return {Path[]} the contours traced
      */
     function tracePaths(segments, operation) {
-        pathIndex = 0;
         pathCount = 1;
 
-        function labelSegment(seg, text) {
+        function labelSegment(seg, label) {
+            var inter = seg._intersection,
+                other = inter && inter._segment,
+                nx1 = inter && inter._next,
+                nx2 = nx1 && nx1._next,
+                nx3 = nx2 && nx2._next,
+                intersections = {
+                    'ix': inter,
+                    'nx¹': nx1,
+                    'nx²': nx2,
+                    'nx³': nx3
+                };
+            label += '   id: ' + seg._path._id + '.' + seg._index
+                    + (other ? ' -> ' + other._path._id + '.' + other._index
+                        : '')
+                    + '   vi: ' + (seg._visited ? 1 : 0)
+                    + '   pt: ' + seg._point
+                    + '   op: ' + isValid(seg)
+                    + '   ov: ' + !!(inter && inter.isOverlap())
+                    + '   wi: ' + seg._winding;
+            for (var key in intersections) {
+                var ix = intersections[key],
+                    s = ix && ix._segment;
+                if (s) {
+                    label += '   ' + key + ': ' + s._path._id + '.' + s._index
+                            + '(' + ix._id + ')';
+                }
+            }
+
             var path = seg._path,
                 item = path._parent instanceof CompoundPath
                         ? path._parent : path,
                 color = item.strokeColor || item.fillColor || 'black',
                 point = seg.point,
-                key = Math.round(point.x / (10 * scaleFactor))
-                    + ',' + Math.round(point.y  / (10 * scaleFactor)),
+                key = Math.round(point.x / scaleFactor / 50)
+                    + ',' + Math.round(point.y / scaleFactor / 50),
                 offset = segmentOffset[key] || 0,
                 size = fontSize * scaleFactor,
                 text = new PointText({
                     point: point.add(new Point(size, size / 2)
                         .add(0, offset * size * 1.2)
                         .rotate(textAngle)),
-                    content: text,
+                    content: label,
                     justification: 'left',
                     fillColor: color,
                     fontSize: fontSize
                 });
+
             segmentOffset[key] = offset + 1;
             // TODO! PointText should have pivot in #point by default!
             text.pivot = text.globalToLocal(text.point);
@@ -624,57 +649,19 @@ PathItem.inject(new function() {
             return text;
         }
 
-        function drawSegment(seg, other, text, index) {
+        function drawSegment(seg, text, index) {
             if (!window.reportSegments || window.reportFilter != null
                     && pathCount != window.reportFilter)
                 return;
             labelSegment(seg, '#' + pathCount + '.'
                             + (path ? path._segments.length + 1 : 1)
-                            + ' (' + (index + 1) + '): ' + text
-                    + '   id: ' + seg._path._id + '.' + seg._index
-                    + (other ? ' -> ' + other._path._id + '.' + other._index : '')
-                    + '   v: ' + (seg._visited ? 1 : 0)
-                    + '   p: ' + seg._point
-                    + '   op: ' + isValid(seg)
-                    + '   ov: ' + !!(inter && inter.isOverlap())
-                    + '   wi: ' + seg._winding
-                    + '   mu: ' + !!(inter && inter._next));
+                            + ' (' + (index + 1) + '): ' + text);
         }
 
-        for (var i = 0, j = 0;
-                i < (window.reportWindings ? segments.length : 0);
-                i++, j++) {
-            var seg = segments[i];
-                path = seg._path,
-                id = path._id,
-                point = seg.point,
-                inter = seg._intersection,
-                nx1 = inter && inter._next,
-                nx2 = nx1 && nx1._next,
-                nx3 = nx2 && nx2._next,
-                intersections = {
-                    'ix': inter,
-                    'nx¹': nx1,
-                    'nx²': nx2,
-                    'nx³': nx3
-                };
-            if (!(id in pathIndices)) {
-                pathIndices[id] = ++pathIndex;
-                j = 0;
+        if (window.reportWindings) {
+            for (var i = 0; i < segments.length; i++) {
+                labelSegment(segments[i], '');
             }
-            var label = ' id: ' + seg._path._id + '.' + seg._index
-                    + '   pt: ' + seg._point
-                    + '   ov: ' + !!(inter && inter.isOverlap())
-                    + '   wi: ' + seg._winding;
-            for (var key in intersections) {
-                var ix = intersections[key],
-                    s = ix && ix._segment;
-                if (s) {
-                    label += '   ' + key + ': ' + s._path._id + '.' + s._index
-                            + '(' + ix._id + ')';
-                }
-            }
-            labelSegment(seg, label);
         }
 
         var paths = [],
@@ -804,6 +791,7 @@ PathItem.inject(new function() {
                             + ', other: ' + inter._segment._path._id + '.'
                                 + inter._segment._index);
                 }
+                var crossed = false;
                 if (isStart(seg)) {
                     finished = true;
                 } else if (other) {
@@ -814,22 +802,17 @@ PathItem.inject(new function() {
                     } else if (isValid(other)) {
                         // The other segment is part of the boolean result, and we
                         // are at crossing, switch over.
-                        drawSegment(seg, other, 'cross', i);
+                        drawSegment(seg, 'cross', i);
+                        crossed = true;
                         // We need to mark overlap segments as visited when
                         // processing intersection.
                         if (inter.isOverlap() && operation === 'intersect')
                             seg._visited = true;
                         seg = other;
-                    } else {
-                        // Keep on truckin'
-                        drawSegment(seg, null, 'stay', i);
                     }
-                } else {
-                    // Keep on truckin'
-                    drawSegment(seg, null, 'stay', i);
                 }
                 if (finished) {
-                    drawSegment(seg, null, 'done', i);
+                    drawSegment(seg, 'done', i);
                     seg._visited = true;
                     break;
                 }
@@ -840,7 +823,11 @@ PathItem.inject(new function() {
                             + (path ? path._segments.length + 1 : 1)
                             + ', id: ' + seg._path._id + '.' + seg._index
                             + ', multiple: ' + !!(inter && inter._next));
+                    drawSegment(seg, 'visited', i);
                     break;
+                }
+                if (!crossed) {
+                    drawSegment(seg, 'add', i);
                 }
                 if (!path) {
                     path = new Path(Item.NO_INSERT);
@@ -850,7 +837,7 @@ PathItem.inject(new function() {
                 // Add the segment to the path, and mark it as visited.
                 path.add(new Segment(seg._point, handleIn, seg._handleOut));
                 if (window.reportSegments) {
-                    console.log('Adding', seg._path._id + '.' + seg._index
+                    console.log('Added', seg._path._id + '.' + seg._index
                             + ': ' + path.lastSegment);
                 }
                 seg._visited = true;
