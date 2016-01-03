@@ -681,7 +681,7 @@ PathItem.inject(new function() {
             start,
             otherStart,
             operator = operators[operation],
-            // Adjust winding contributions for specific operations on overlaps:
+            // Adjust winding contributions for unite operation on overlaps:
             overlapWinding = operation === 'unite' && { 1: 2 };
 
         function isValid(seg, adjusted) {
@@ -697,7 +697,7 @@ PathItem.inject(new function() {
         }
 
         function isStart(seg) {
-            return seg && (seg === start || seg === otherStart);
+            return seg === start || seg === otherStart;
         }
 
         // If there are multiple possible intersections, find the one that's
@@ -804,25 +804,26 @@ PathItem.inject(new function() {
                             + ', other: ' + inter._segment._path._id + '.'
                                 + inter._segment._index);
                 }
-                if (!path) {
-                    // Just add the first segment and all segments that have no
-                    // intersection.
-                    drawSegment(seg, null, 'add', i);
-                } else if (isStart(seg)) {
+                if (isStart(seg)) {
                     finished = true;
-                } else if (isStart(other)) {
-                    finished = true;
-                    // Switch the segment, but do not update handleIn
-                    seg = other;
-                } else if (other && isValid(other)) {
-                    // The other segment is part of the boolean result, and we
-                    // are at crossing, switch over.
-                    drawSegment(seg, other, 'cross', i);
-                    // We need to mark overlap segments as visited when
-                    // processing intersection.
-                    if (inter.isOverlap() && operation === 'intersect')
-                        seg._visited = true;
-                    seg = other;
+                } else if (other) {
+                    if (isStart(other)) {
+                        finished = true;
+                        // Switch the segment, but do not update handleIn
+                        seg = other;
+                    } else if (isValid(other)) {
+                        // The other segment is part of the boolean result, and we
+                        // are at crossing, switch over.
+                        drawSegment(seg, other, 'cross', i);
+                        // We need to mark overlap segments as visited when
+                        // processing intersection.
+                        if (inter.isOverlap() && operation === 'intersect')
+                            seg._visited = true;
+                        seg = other;
+                    } else {
+                        // Keep on truckin'
+                        drawSegment(seg, null, 'stay', i);
+                    }
                 } else {
                     // Keep on truckin'
                     drawSegment(seg, null, 'stay', i);
