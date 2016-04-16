@@ -21,7 +21,7 @@ var Shape = Item.extend(/** @lends Shape# */{
     _class: 'Shape',
     _applyMatrix: false,
     _canApplyMatrix: false,
-    _boundsSelected: true,
+    _canScaleStroke: true,
     _serializeFields: {
         type: null,
         size: null,
@@ -48,8 +48,9 @@ var Shape = Item.extend(/** @lends Shape# */{
     /**
      * The type of shape of the item as a string.
      *
-     * @type String('rectangle', 'circle', 'ellipse')
      * @bean
+     * @type String
+     * @values 'rectangle', 'circle', 'ellipse'
      */
     getType: function() {
         return this._type;
@@ -62,7 +63,7 @@ var Shape = Item.extend(/** @lends Shape# */{
     /**
      * @private
      * @bean
-     * @deprecated use {@link #type} instead.
+     * @deprecated use {@link #getType()} instead.
      */
     getShape: '#getType',
     setShape: '#setType',
@@ -70,8 +71,8 @@ var Shape = Item.extend(/** @lends Shape# */{
     /**
      * The size of the shape.
      *
-     * @type Size
      * @bean
+     * @type Size
      */
     getSize: function() {
         var size = this._size;
@@ -109,8 +110,8 @@ var Shape = Item.extend(/** @lends Shape# */{
      * The radius of the shape, as a number if it is a circle, or a size object
      * for ellipses and rounded rectangles.
      *
-     * @type Number|Size
      * @bean
+     * @type Number|Size
      */
     getRadius: function() {
         var rad = this._radius;
@@ -180,12 +181,14 @@ var Shape = Item.extend(/** @lends Shape# */{
         // Respect the setting of paper.settings.applyMatrix for new paths:
         if (paper.settings.applyMatrix)
             path.setApplyMatrix(true);
-        if (insert != false) // No double-equal!
+        if (insert === undefined || insert)
             path.insertAbove(this);
         return path;
     },
 
-    _draw: function(ctx, param, strokeMatrix) {
+    toShape: '#clone',
+
+    _draw: function(ctx, param, viewMatrix, strokeMatrix) {
         var style = this._style,
             hasFill = style.hasFill(),
             hasStroke = style.hasStroke(),
@@ -255,7 +258,7 @@ var Shape = Item.extend(/** @lends Shape# */{
             ctx.closePath();
         }
         if (!dontPaint && (hasFill || hasStroke)) {
-            this._setStyles(ctx);
+            this._setStyles(ctx, param, viewMatrix);
             if (hasFill) {
                 ctx.fill(style.getFillRule());
                 ctx.shadowColor = 'rgba(0,0,0,0)';
@@ -271,20 +274,19 @@ var Shape = Item.extend(/** @lends Shape# */{
         return !(this.hasFill() && this.hasStroke());
     },
 
-    _getBounds: function(getter, matrix) {
+    _getBounds: function(matrix, options) {
         var rect = new Rectangle(this._size).setCenter(0, 0),
-            strokeWidth = getter === 'getStrokeBounds' && this.hasStroke()
-                && this.getStrokeWidth(),
-            scaling = strokeWidth && this.getStrokeScaling();
+            style = this._style,
+            strokeWidth = options.stroke && style.hasStroke()
+                    && style.getStrokeWidth();
         // If we're getting the strokeBounds, include the stroke width before
         // or after transforming the rect, based on strokeScaling.
-        if (strokeWidth && scaling)
-            rect = rect.expand(strokeWidth);
         if (matrix)
             rect = matrix._transformBounds(rect);
-        if (strokeWidth && !scaling)
-            rect = rect.expand(strokeWidth);
-        return rect;
+        return strokeWidth
+                ? rect.expand(Path._getStrokePadding(strokeWidth,
+                    this._getStrokeMatrix(matrix, options)))
+                : rect;
     }
 },
 new function() { // Scope for _contains() and _hitTestSelf() code.
@@ -307,14 +309,20 @@ new function() { // Scope for _contains() and _hitTestSelf() code.
         }
     }
 
-    // Calculates the length of the ellipse radius that passes through the point
-    function getEllipseRadius(point, radius) {
-        var angle = point.getAngleInRadians(),
-            width = radius.width * 2,
-            height = radius.height * 2,
-            x = width * Math.sin(angle),
-            y = height * Math.cos(angle);
-        return width * height / (2 * Math.sqrt(x * x + y * y));
+    function isOnEllipseStroke(point, radius, padding, quadrant) {
+        // Translate the ellipse / circle to the unit circle with radius 1, and
+        // translate the point along by dividing with radius (a number for
+        // circle, a size for ellipse). Then subtract the radius with the same
+        // direction as point (vector.normalize()), to get a vector that
+        // describe proximity and direction to the stroke. Translate this back
+        // by multiplying with radius, then divide by strokePadding to get a new
+        // vector in stroke space, and finally check its length.
+        var vector = point.divide(radius);
+        // We also have to check the vector's quadrant in case we're matching
+        // quarter ellipses in the corners.
+        return (!quadrant || vector.quadrant === quadrant) &&
+                vector.subtract(vector.normalize()).multiply(radius)
+                    .divide(padding).length <= 1;
     }
 
     return /** @lends Shape# */{
@@ -332,36 +340,43 @@ new function() { // Scope for _contains() and _hitTestSelf() code.
             }
         },
 
-        _hitTestSelf: function _hitTestSelf(point, options) {
-            var hit = false;
-            if (this.hasStroke()) {
+        _hitTestSelf: function _hitTestSelf(point, options, viewMatrix,
+                strokeMatrix) {
+            var hit = false,
+                style = this._style,
+                hitStroke = options.stroke && style.hasStroke(),
+                hitFill = options.fill && style.hasFill();
+            // Just like in Path, use stroke-hit-tests also for hitting fill
+            // with tolerance:
+            if (hitStroke || hitFill) {
                 var type = this._type,
                     radius = this._radius,
-                    strokeWidth = this.getStrokeWidth() + 2 * options.tolerance;
+                    strokeRadius = hitStroke ? style.getStrokeWidth() / 2 : 0,
+                    strokePadding = options._tolerancePadding.add(
+                        Path._getStrokePadding(strokeRadius,
+                            !style.getStrokeScaling() && strokeMatrix));
                 if (type === 'rectangle') {
-                    var center = getCornerCenter(this, point, strokeWidth);
+                    var padding = strokePadding.multiply(2),
+                        center = getCornerCenter(this, point, padding);
                     if (center) {
-                        // Check the stroke of the quarter corner ellipse,
-                        // similar to the ellipse check further down:
-                        var pt = point.subtract(center);
-                        hit = 2 * Math.abs(pt.getLength()
-                                - getEllipseRadius(pt, radius)) <= strokeWidth;
+                        // Check the stroke of the quarter corner ellipse:
+                        hit = isOnEllipseStroke(point.subtract(center), radius,
+                                strokePadding, center.getQuadrant());
                     } else {
                         var rect = new Rectangle(this._size).setCenter(0, 0),
-                            outer = rect.expand(strokeWidth),
-                            inner = rect.expand(-strokeWidth);
+                            outer = rect.expand(padding),
+                            inner = rect.expand(padding.negate());
                         hit = outer._containsPoint(point)
                                 && !inner._containsPoint(point);
                     }
                 } else {
-                    if (type === 'ellipse')
-                        radius = getEllipseRadius(point, radius);
-                    hit = 2 * Math.abs(point.getLength() - radius)
-                            <= strokeWidth;
+                    hit = isOnEllipseStroke(point, radius, strokePadding);
                 }
             }
-            return hit
-                    ? new HitResult('stroke', this)
+            // NOTE: The above test is only for stroke, and the added tolerance
+            // when testing for fill. The actual fill test happens in
+            // Item#_hitTestSelf(), through its call of #_contains().
+            return hit ? new HitResult(hitStroke ? 'stroke' : 'fill', this)
                     : _hitTestSelf.base.apply(this, arguments);
         }
     };

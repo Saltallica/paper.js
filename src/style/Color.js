@@ -75,7 +75,7 @@ var Color = Base.extend(new function() {
                 var value = +components[i];
                 components[i] = i < 3 ? value / 255 : value;
             }
-        } else {
+        } else if (window) {
             // Named
             var cached = colorCache[string];
             if (!cached) {
@@ -102,6 +102,9 @@ var Color = Base.extend(new function() {
                 ];
             }
             components = cached.slice();
+        } else {
+            // Web-workers can't resolve CSS color names, for now.
+            components = [0, 0, 0];
         }
         return components;
     }
@@ -604,7 +607,7 @@ var Color = Base.extend(new function() {
             // Default fallbacks: rgb, black
             this._type = type || 'rgb';
             // Define this Color's unique id in its own private id pool.
-            // NOTE: This is required by SVG Export code!
+            // NOTE: This is only required by SVG Export code!
             this._id = UID.get(Color);
             if (!components) {
                 // Produce a components array now, and parse values. Even if no
@@ -628,7 +631,7 @@ var Color = Base.extend(new function() {
         _serialize: function(options, dictionary) {
             var components = this.getComponents();
             return Base.serialize(
-                    // We can ommit the type for gray and rgb:
+                    // We can omit the type for gray and rgb:
                     /^(gray|rgb)$/.test(this._type)
                         ? components
                         : [this._type].concat(components),
@@ -662,8 +665,8 @@ var Color = Base.extend(new function() {
         /**
          * Converts the color another type.
          *
-         * @param {String('rgb', 'gray', 'hsb', 'hsl')} type the color type to
-         * convert to.
+         * @param {String} type the color type to convert to. Possible values:
+         * {@values 'rgb', 'gray', 'hsb', 'hsl'}
          * @return {Color} the converted color as a new instance
          */
         convert: function(type) {
@@ -673,8 +676,9 @@ var Color = Base.extend(new function() {
         /**
          * The type of the color as a string.
          *
-         * @type String('rgb', 'gray', 'hsb', 'hsl')
          * @bean
+         * @type String
+         * @values 'rgb', 'gray', 'hsb', 'hsl'
          *
          * @example
          * var color = new Color(1, 0, 0);
@@ -694,8 +698,8 @@ var Color = Base.extend(new function() {
          * The color components that define the color, including the alpha value
          * if defined.
          *
-         * @type Number[]
          * @bean
+         * @type Number[]
          */
         getComponents: function() {
             var components = this._components.slice();
@@ -708,8 +712,8 @@ var Color = Base.extend(new function() {
          * The color's alpha value as a number between `0` and `1`.
          * All colors of the different subclasses support alpha values.
          *
-         * @type Number
          * @bean
+         * @type Number
          * @default 1
          *
          * @example {@paperscript}
@@ -796,7 +800,7 @@ var Color = Base.extend(new function() {
         /**
          * Returns the color as a CSS string.
          *
-         * @param {Boolean} hex whether to return the color in hexadecial
+         * @param {Boolean} hex whether to return the color in hexadecimal
          * representation or as a CSS RGB / RGBA string.
          * @return {String} a CSS string representation of the color
          */
@@ -852,7 +856,11 @@ var Color = Base.extend(new function() {
             }
             for (var i = 0, l = stops.length; i < l; i++) {
                 var stop = stops[i];
-                canvasGradient.addColorStop(stop._rampPoint,
+                // Use the defined offset, and fall back to automatic linear
+                // calculation.
+                // NOTE: that if _rampPoint is 0 for the first entry, the fall
+                // back will be so too.
+                canvasGradient.addColorStop(stop._rampPoint || i / (l - 1),
                         stop._color.toCanvasStyle());
             }
             return this._canvasStyle = canvasGradient;

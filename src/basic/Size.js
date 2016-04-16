@@ -466,6 +466,13 @@ var Size = Base.extend(/** @lends Size# */{
          * var size2 = new Size(200, 5);
          * var minSize = Size.min(size1, size2);
          * console.log(minSize); // {width: 10, height: 5}
+         *
+         * @example
+         * // Find the minimum of multiple sizes:
+         * var size1 = new Size(60, 100);
+         * var size2 = new Size(200, 5);
+         * var size3 = new Size(250, 35);
+         * [size1, size2, size3].reduce(Size.min) // {width: 60, height: 5}
          */
         min: function(size1, size2) {
             return new Size(
@@ -487,6 +494,13 @@ var Size = Base.extend(/** @lends Size# */{
          * var size2 = new Size(200, 5);
          * var maxSize = Size.max(size1, size2);
          * console.log(maxSize); // {width: 200, height: 100}
+         *
+         * @example
+         * // Find the maximum of multiple sizes:
+         * var size1 = new Size(60, 100);
+         * var size2 = new Size(200, 5);
+         * var size3 = new Size(250, 35);
+         * [size1, size2, size3].reduce(Size.max) // {width: 250, height: 100}
          */
         max: function(size1, size2) {
             return new Size(
@@ -510,10 +524,10 @@ var Size = Base.extend(/** @lends Size# */{
             return new Size(Math.random(), Math.random());
         }
     }
-}, Base.each(['round', 'ceil', 'floor', 'abs'], function(name) {
+}, Base.each(['round', 'ceil', 'floor', 'abs'], function(key) {
     // Inject round, ceil, floor, abs:
-    var op = Math[name];
-    this[name] = function() {
+    var op = Math[key];
+    this[key] = function() {
         return new Size(op(this.width), op(this.height));
     };
 }, {}));
@@ -524,7 +538,6 @@ var Size = Base.extend(/** @lends Size# */{
  * @class An internal version of Size that notifies its owner of each change
  * through setting itself again on the setter that corresponds to the getter
  * that produced this LinkedSize.
- * Note: This prototype is not exported.
  *
  * @private
  */

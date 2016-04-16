@@ -10,6 +10,7 @@
  * All rights reserved.
  */
 
-/*#*/ include('item/ChangeFlag.js');
-/*#*/ include('path/SelectionState.js');
 /*#*/ include('util/Numerical.js');
+/*#*/ include('item/ChangeFlag.js');
+/*#*/ include('item/ItemSelection.js');
+/*#*/ include('path/SegmentSelection.js');

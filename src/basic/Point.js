@@ -1,4 +1,3 @@
-
 /*
  * Paper.js - The Swiss Army Knife of Vector Graphics Scripting.
  * http://paperjs.org/
@@ -47,7 +46,7 @@ var Point = Base.extend(/** @lends Point# */{
      * coordinates.
      *
      * @name Point#initialize
-     * @param {array} array
+     * @param {Array} array
      *
      * @example
      * // Creating a point at x: 10, y: 5 using an array of numbers:
@@ -245,8 +244,8 @@ var Point = Base.extend(/** @lends Point# */{
      * = 0`, `y = 0`) to the point's location. Setting the length changes the
      * location but keeps the vector's angle.
      *
-     * @type Number
      * @bean
+     * @type Number
      */
     getLength: function() {
         return Math.sqrt(this.x * this.x + this.y * this.y);
@@ -285,8 +284,8 @@ var Point = Base.extend(/** @lends Point# */{
     /**
      * The vector's angle in degrees, measured from the x-axis to the vector.
      *
-     * @name Point#getAngle
      * @bean
+     * @name Point#getAngle
      * @type Number
      */
     getAngle: function(/* point */) {
@@ -312,8 +311,8 @@ var Point = Base.extend(/** @lends Point# */{
     /**
      * The vector's angle in radians, measured from the x-axis to the vector.
      *
-     * @name Point#getAngleInRadians
      * @bean
+     * @name Point#getAngleInRadians
      * @type Number
      */
     getAngleInRadians: function(/* point */) {
@@ -362,8 +361,8 @@ var Point = Base.extend(/** @lends Point# */{
      * are in quadrant `3` and angles between 270 and 360 degrees are in
      * quadrant `4`.
      *
-     * @type Number
      * @bean
+     * @type Number
      *
      * @example
      * var point = new Point({
@@ -565,7 +564,8 @@ var Point = Base.extend(/** @lends Point# */{
      * @function
      * @operator
      * @param {Number} number the number to multiply by
-     * @return {Point} the multiplication of the point and the value as a new point
+     * @return {Point} the multiplication of the point and the value as a new
+     *     point
      *
      * @example
      * var point = new Point(10, 20);
@@ -782,13 +782,35 @@ var Point = Base.extend(/** @lends Point# */{
     },
 
     /**
-     * This property is only present if the point is an anchor or control point
-     * of a {@link Segment} or a {@link Curve}. In this case, it returns
-     * {@true it is selected}
+     * This property is only valid if the point is an anchor or handle point
+     * of a {@link Segment} or a {@link Curve}, or the position of an
+     * {@link Item}, as returned by {@link Item#position},
+     * {@link Segment#point}, {@link Segment#handleIn},
+     * {@link Segment#handleOut}, {@link Curve#point1}, {@link Curve#point2},
+     * {@link Curve#handle1}, {@link Curve#handle2}.
+     *
+     * In those cases, it returns {@true if it the point is selected}.
+     *
+     * Paper.js renders selected points on top of your project. This is very
+     * useful when debugging.
      *
      * @name Point#selected
      * @property
-     * @return {Boolean} {@true if the point is selected}
+     * @type Boolean
+     * @default false
+     *
+     * @example {@paperscript}
+     * var path = new Path.Circle({
+     *     center: [80, 50],
+     *     radius: 40
+     * });
+     *
+     * // Select the third segment point:
+     * path.segments[2].point.selected = true;
+     *
+     * // Select the item's position, which is the pivot point
+     * // around which it is transformed:
+     * path.position.selected = true;
      */
 
     /**
@@ -865,6 +887,13 @@ var Point = Base.extend(/** @lends Point# */{
          * var point2 = new Point(200, 5);
          * var minPoint = Point.min(point1, point2);
          * console.log(minPoint); // {x: 10, y: 5}
+         *
+         * @example
+         * // Find the minimum of multiple points:
+         * var point1 = new Point(60, 100);
+         * var point2 = new Point(200, 5);
+         * var point3 = new Point(250, 35);
+         * [point1, point2, point3].reduce(Point.min) // {x: 60, y: 5}
          */
         min: function(/* point1, point2 */) {
             var point1 = Point.read(arguments),
@@ -889,6 +918,13 @@ var Point = Base.extend(/** @lends Point# */{
          * var point2 = new Point(200, 5);
          * var maxPoint = Point.max(point1, point2);
          * console.log(maxPoint); // {x: 200, y: 100}
+         *
+         * @example
+         * // Find the maximum of multiple points:
+         * var point1 = new Point(60, 100);
+         * var point2 = new Point(200, 5);
+         * var point3 = new Point(250, 35);
+         * [point1, point2, point3].reduce(Point.max) // {x: 250, y: 100}
          */
         max: function(/* point1, point2 */) {
             var point1 = Point.read(arguments),
@@ -934,10 +970,10 @@ var Point = Base.extend(/** @lends Point# */{
                         * /*#=*/Numerical.TRIGONOMETRIC_EPSILON;
         }
     }
-}, Base.each(['round', 'ceil', 'floor', 'abs'], function(name) {
+}, Base.each(['round', 'ceil', 'floor', 'abs'], function(key) {
     // Inject round, ceil, floor, abs:
-    var op = Math[name];
-    this[name] = function() {
+    var op = Math[key];
+    this[key] = function() {
         return new Point(op(this.x), op(this.y));
     };
 }, {}));
@@ -948,9 +984,8 @@ var Point = Base.extend(/** @lends Point# */{
  * @class An internal version of Point that notifies its owner of each change
  * through setting itself again on the setter that corresponds to the getter
  * that produced this LinkedPoint.
- * Note: This prototype is not exported.
  *
- * @ignore
+ * @private
  */
 var LinkedPoint = Point.extend({
     // Have LinkedPoint appear as a normal Point in debugging
@@ -985,5 +1020,17 @@ var LinkedPoint = Point.extend({
     setY: function(y) {
         this._y = y;
         this._owner[this._setter](this);
+    },
+
+    isSelected: function() {
+        return !!(this._owner._selection & this._getSelection());
+    },
+
+    setSelected: function(selected) {
+        this._owner.changeSelection(this._getSelection(), selected);
+    },
+
+    _getSelection: function() {
+        return this._setter === 'setPosition' ? /*#=*/ItemSelection.POSITION : 0;
     }
 });
